@@ -1,92 +1,62 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-
-# Import Machine Learning Models
 from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.metrics import mean_squared_error, r2_score
 
-def load_and_preprocess_data(file_path):
-    """Loads the dataset, handles missing values, and splits features/target."""
+def load_and_preprocess_data(filepath):
     print("[INFO] Loading dataset...")
-    # Replace 'life_expectancy_data.csv' with your actual WHO dataset file path
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(filepath)
     
-    # Assuming 'Life expectancy' is the target column and others are features
-    # Adjust column names based on your specific CSV file from Kaggle/WHO
+    # Strip whitespace from column names to prevent matching errors
+    df.columns = df.columns.str.strip()
+    
     target_column = 'Life expectancy'
-    
     if target_column not in df.columns:
-        raise ValueError(f"Target column '{target_column}' not found in dataset.")
-
-    X = df.drop(columns=[target_column])
+        raise ValueError(f"Target column '{target_column}' not found in dataset. Available columns: {list(df.columns)}")
+        
+    print(f"[INFO] Target column '{target_column}' found successfully.")
+    
+    # Handle missing values by dropping rows where target is NaN
+    df = df.dropna(subset=[target_column])
+    
+    # Encode categorical 'Status' column if present ('Developed' / 'Developing')
+    if 'Status' in df.columns:
+        df['Status'] = df['Status'].map({'Developed': 1, 'Developing': 0})
+        
+    # Select numeric features for prediction
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    # Fill missing values in features with median
+    df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].median())
+    
+    # Define features (X) and target (y)
+    X = df.drop(columns=['Country', target_column], errors='ignore')
     y = df[target_column]
-
-    # Handle categorical variables if any exist
-    X = pd.get_dummies(X, drop_first=True)
-
-    # Train-Test Split (80% training, 20% testing) as per Chapter 3.3
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-    # Handling missing values using median imputation
-    imputer = SimpleImputer(strategy='median')
-    X_train_imputed = imputer.fit_transform(X_train)
-    X_test_imputed = imputer.transform(X_test)
-
-    # Feature scaling using StandardScaler
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train_imputed)
-    X_test_scaled = scaler.transform(X_test_imputed)
-
-    return X_train_scaled, X_test_scaled, y_train, y_test
-
-def train_and_evaluate_models(X_train, X_test, y_train, y_test):
-    """Trains multiple models and evaluates them using MAE, MSE, and R2 Score."""
-    models = {
-        "Linear Regression": LinearRegression(),
-        "Decision Tree": DecisionTreeRegressor(random_state=42),
-        "Random Forest": RandomForestRegressor(random_state=42),
-        "Gradient Boosting": GradientBoostingRegressor(random_state=42)
-    }
-
-    results = []
-
-    for name, model in models.items():
-        print(f"[INFO] Training {name}...")
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
-
-        # Evaluation metrics specified in synopsis
-        mae = mean_absolute_error(y_test, y_pred)
-        mse = mean_squared_error(y_test, y_pred)
-        r2 = r2_score(y_test, y_pred)
-
-        results.append({
-            "Model": name,
-            "MAE": mae,
-            "MSE": mse,
-            "R2 Score": r2
-        })
-
-    results_df = pd.DataFrame(results)
-    print("\n--- Model Evaluation Results ---")
-    print(results_df.to_string(index=False))
-    return results_df
+    
+    return train_test_split(X, y, test_size=0.2, random_state=42)
 
 if __name__ == "__main__":
     try:
-        # Update path to your dataset CSV file
-        DATASET_PATH = "life_expectancy_data.csv"
+        X_train, X_test, y_train, y_test = load_and_preprocess_data('life_expectancy_data.csv')
+        print(f"[INFO] Training set shape: {X_train.shape}")
+        print(f"[INFO] Testing set shape: {X_test.shape}")
         
-        X_train, X_test, y_train, y_test = load_and_preprocess_data(DATASET_PATH)
-        train_and_evaluate_models(X_train, X_test, y_train, y_test)
+        print("[INFO] Training Linear Regression model...")
+        model = LinearRegression()
+        model.fit(X_train, y_train)
         
-    except FileNotFoundError:
-        print(f"[ERROR] Could not find '{DATASET_PATH}'. Please place your CSV file in the project directory.")
+        print("[INFO] Evaluating model...")
+        y_pred = model.predict(X_test)
+        
+        mse = mean_squared_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+        
+        print("--- Model Performance ---")
+        print(f"Mean Squared Error (MSE): {mse:.4f}")
+        print(f"R-squared (R2 Score): {r2:.4f}")
+        
+    except Exception as e:
+        print(f"[ERROR] {e}")
